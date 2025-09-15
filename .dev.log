@@ -1,0 +1,344 @@
+ ⚠ Port 3000 is in use, using available port 3001 instead.
+   ▲ Next.js 15.3.5 (Turbopack)
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.1.48:3001
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 816ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1907ms
+ GET / 200 in 2189ms
+ ⚠ Found a change in next.config.ts. Restarting the server to apply the changes...
+   ▲ Next.js 15.3.5 (Turbopack)
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.1.48:3001
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 869ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1818ms
+ GET / 200 in 2094ms
+ ✓ Compiled /icon.svg in 335ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 586ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 217ms
+ ✓ Compiled /api/auth/login in 316ms
+ POST /api/auth/login 200 in 351ms
+ ✓ Compiled /api/inventory in 475ms
+ GET /api/inventory 200 in 1914ms
+ GET /api/inventory 200 in 306ms
+ GET /api/inventory 200 in 282ms
+ ✓ Compiled /api/orders in 357ms
+ GET /api/inventory 200 in 413ms
+ GET /api/orders?limit=50&order=desc 200 in 2489ms
+ GET /api/orders?limit=50&order=desc 200 in 285ms
+ ✓ Compiled /api/orders/[id] in 338ms
+Error: Route "/api/orders/[id]" used `params.id`. `params` should be awaited before using its properties. Learn more: https://nextjs.org/docs/messages/sync-dynamic-apis
+    at GET (src/app/api/orders/[id]/route.ts:11:22)
+   9 | ) {
+  10 |   try {
+> 11 |     const id = params.id;
+     |                      ^
+  12 |
+  13 |     if (!id || isNaN(parseInt(id))) {
+  14 |       return NextResponse.json({ 
+ GET /api/orders/4 200 in 1062ms
+ GET /api/inventory 200 in 1204ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 1212ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 292ms
+ GET /api/inventory 200 in 295ms
+ GET /api/inventory 200 in 860ms
+ GET /api/inventory 200 in 287ms
+ GET /api/inventory 200 in 296ms
+ GET /api/inventory 200 in 287ms
+ GET /api/orders?limit=50&order=desc 200 in 838ms
+ GET /api/orders?limit=50&order=desc 200 in 307ms
+Error: Route "/api/orders/[id]" used `params.id`. `params` should be awaited before using its properties. Learn more: https://nextjs.org/docs/messages/sync-dynamic-apis
+    at GET (src/app/api/orders/[id]/route.ts:11:22)
+   9 | ) {
+  10 |   try {
+> 11 |     const id = params.id;
+     |                      ^
+  12 |
+  13 |     if (!id || isNaN(parseInt(id))) {
+  14 |       return NextResponse.json({ 
+ GET /api/orders/4 200 in 356ms
+ GET /api/inventory 200 in 991ms
+ GET /api/inventory 200 in 293ms
+ GET /api/orders?limit=50&order=desc 200 in 857ms
+ GET /api/inventory 200 in 875ms
+ GET /api/orders?limit=50&order=desc 200 in 357ms
+ GET /api/inventory 200 in 342ms
+Error: Route "/api/orders/[id]" used `params.id`. `params` should be awaited before using its properties. Learn more: https://nextjs.org/docs/messages/sync-dynamic-apis
+    at GET (src/app/api/orders/[id]/route.ts:11:22)
+   9 | ) {
+  10 |   try {
+> 11 |     const id = params.id;
+     |                      ^
+  12 |
+  13 |     if (!id || isNaN(parseInt(id))) {
+  14 |       return NextResponse.json({ 
+ GET /api/orders/4 200 in 354ms
+ GET /api/orders/4 200 in 1297ms
+ GET / 200 in 66ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 221ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 213ms
+ POST /api/auth/login 200 in 15ms
+ GET /api/inventory 200 in 1106ms
+ GET /api/inventory 200 in 284ms
+ GET /api/inventory 200 in 288ms
+ GET /api/inventory 200 in 286ms
+ GET /api/orders?limit=50&order=desc 200 in 852ms
+ GET /api/orders?limit=50&order=desc 200 in 280ms
+ GET /api/orders/4 200 in 308ms
+ POST /api/orders 201 in 3277ms
+ PATCH /api/orders/5 200 in 1141ms
+ GET /api/orders/5 200 in 315ms
+ GET /api/inventory 200 in 280ms
+ POST /api/orders 201 in 2432ms
+ PATCH /api/orders/6 200 in 1186ms
+ GET /api/orders/6 200 in 296ms
+ GET /api/inventory 200 in 279ms
+ DELETE /api/orders/5 204 in 2579ms
+ GET /api/inventory 200 in 400ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 299ms
+ GET /api/inventory 200 in 310ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 302ms
+ GET /api/inventory 200 in 298ms
+ GET /api/inventory 200 in 1095ms
+ GET /api/orders?limit=50&order=desc 200 in 1098ms
+ GET /api/inventory 200 in 910ms
+ GET /api/orders?limit=50&order=desc 200 in 912ms
+ GET /api/orders/6 200 in 304ms
+ GET /api/orders/4 200 in 310ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 283ms
+ GET /api/inventory 200 in 286ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 326ms
+ GET /api/inventory 200 in 326ms
+ ✓ Compiled /api/analytics/summary in 369ms
+ GET /api/analytics/summary 200 in 3004ms
+ GET /api/analytics/summary 200 in 1387ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 1012ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 288ms
+ GET /api/orders?limit=50&order=desc 200 in 932ms
+ GET /api/inventory 200 in 950ms
+ GET /api/orders?limit=50&order=desc 200 in 343ms
+ GET /api/inventory 200 in 332ms
+ GET /api/orders/4 200 in 324ms
+ GET /api/orders/6 200 in 326ms
+ ✓ Compiled in 268ms
+ GET / 200 in 205ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 226ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 212ms
+ ✓ Compiled in 223ms
+ POST /api/auth/login 200 in 19ms
+ GET /api/inventory 200 in 1135ms
+ GET /api/inventory 200 in 284ms
+ GET /api/inventory 200 in 318ms
+ GET /api/inventory 200 in 330ms
+ GET /api/orders?limit=50&order=desc 200 in 925ms
+ GET /api/orders?limit=50&order=desc 200 in 377ms
+ GET /api/orders/6 200 in 322ms
+ GET /api/orders/4 200 in 323ms
+ GET /api/inventory 200 in 346ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 350ms
+ GET /api/inventory 200 in 316ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 319ms
+ GET /api/orders?limit=50&order=desc 200 in 953ms
+ GET /api/inventory 200 in 958ms
+ GET /api/inventory 200 in 353ms
+ GET /api/orders?limit=50&order=desc 200 in 358ms
+ GET /api/orders/4 200 in 304ms
+ GET /api/orders/6 200 in 306ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 925ms
+ GET /api/inventory 200 in 929ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 294ms
+ GET /api/inventory 200 in 295ms
+ GET /api/inventory 200 in 835ms
+ GET /api/orders?limit=50&order=desc 200 in 840ms
+ GET /api/orders?limit=50&order=desc 200 in 299ms
+ GET /api/inventory 200 in 303ms
+ GET /api/orders/4 200 in 318ms
+ GET /api/orders/6 200 in 321ms
+ GET /api/inventory 200 in 280ms
+ GET /api/inventory 200 in 289ms
+ ✓ Compiled in 196ms
+ ✓ Compiled in 219ms
+ GET / 200 in 208ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 223ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 218ms
+ POST /api/auth/login 200 in 20ms
+ GET /api/inventory 200 in 1727ms
+ GET /api/inventory 200 in 290ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 288ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 293ms
+ GET /api/inventory 200 in 888ms
+ GET /api/inventory 200 in 287ms
+ GET /api/inventory 200 in 1056ms
+ GET /api/inventory 200 in 292ms
+ ✓ Compiled /api/products in 324ms
+ GET /api/products?brand=Panda 200 in 668ms
+ GET /api/products?brand=Chain 200 in 850ms
+ POST /api/inventory 201 in 2402ms
+ GET /api/inventory 200 in 852ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 869ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 286ms
+ GET /api/inventory 200 in 304ms
+ GET /api/inventory 200 in 940ms
+ GET /api/inventory 200 in 288ms
+ GET /api/products?brand=Chain 200 in 283ms
+ POST /api/inventory 201 in 2692ms
+ GET /api/orders?limit=50&order=desc 200 in 948ms
+ GET /api/inventory 200 in 954ms
+ GET /api/inventory 200 in 308ms
+ GET /api/orders?limit=50&order=desc 200 in 314ms
+ GET /api/orders/4 200 in 311ms
+ GET /api/orders/6 200 in 317ms
+ GET /api/inventory 200 in 282ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 286ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 289ms
+ GET /api/inventory 200 in 295ms
+ GET /api/inventory 200 in 866ms
+ GET /api/inventory 200 in 289ms
+ GET /api/inventory 200 in 285ms
+ GET /api/inventory 200 in 280ms
+ GET /api/orders?limit=50&order=desc 200 in 947ms
+ GET /api/orders?limit=50&order=desc 200 in 288ms
+ GET /api/orders/4 200 in 344ms
+ GET /api/orders/6 200 in 347ms
+ ✓ Compiled in 172ms
+ ✓ Compiled in 184ms
+ GET / 200 in 178ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 223ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 216ms
+ POST /api/auth/login 200 in 18ms
+ GET /api/inventory 200 in 1318ms
+ GET /api/inventory 200 in 309ms
+ GET /api/inventory 200 in 282ms
+ GET /api/inventory 200 in 281ms
+ GET /api/orders?limit=50&order=desc 200 in 857ms
+ GET /api/orders?limit=50&order=desc 200 in 294ms
+ GET /api/orders/6 200 in 383ms
+ GET /api/orders/4 200 in 384ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 968ms
+ GET /api/inventory 200 in 980ms
+ GET /api/orders?status=processing&order=desc&limit=100 200 in 284ms
+ GET /api/inventory 200 in 297ms
+ GET /api/inventory 200 in 1023ms
+ GET /api/orders?limit=50&order=desc 200 in 1042ms
+ GET /api/inventory 200 in 287ms
+ GET /api/orders?limit=50&order=desc 200 in 293ms
+ GET /api/orders/6 200 in 317ms
+ GET /api/orders/4 200 in 322ms
+ GET /api/inventory 200 in 838ms
+ GET /api/inventory 200 in 298ms
+ GET /api/inventory 200 in 329ms
+ GET /api/inventory 200 in 408ms
+ GET /api/orders?limit=50&order=desc 200 in 1012ms
+ GET /api/orders?limit=50&order=desc 200 in 318ms
+ GET /api/orders/6 200 in 382ms
+ GET /api/orders/4 200 in 384ms
+ GET / 200 in 55ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 222ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 221ms
+ POST /api/auth/login 200 in 19ms
+ GET /api/inventory 200 in 957ms
+ GET /api/inventory 200 in 286ms
+ GET /api/inventory 200 in 286ms
+ GET /api/inventory 200 in 285ms
+ GET /api/orders?limit=50&order=desc 200 in 848ms
+ GET /api/orders?limit=50&order=desc 200 in 292ms
+ GET /api/orders/6 200 in 316ms
+ GET /api/orders/4 200 in 325ms
+home/pedalsup/Meet/Work/kushalkiteapp/.next/server/app/icon.svg/route.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/require.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/load-components.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/utils.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/swc/options.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/swc/index.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/next-config-ts/transpile-config.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/config.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/next.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/lib/start-server.js
+    at Object.<anonymous> (.next/server/app/icon.svg/route.js:2:17) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array],
+  page: '/icon.svg'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'
+}
+ GET /icon.svg?icon.ce1c2e6c.svg 500 in 675ms
+ GET /icon.svg?icon.ce1c2e6c.svg 500 in 33ms
+ ⨯ Error: Cannot find module '../../chunks/[turbopack]_runtime.js'
+Require stack:
+- /home/pedalsup/Meet/Work/kushalkiteapp/.next/server/app/icon.svg/route.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/require.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/load-components.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/utils.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/swc/options.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/swc/index.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/next-config-ts/transpile-config.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/config.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/next.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/lib/start-server.js
+    at Object.<anonymous> (.next/server/app/icon.svg/route.js:2:17) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array],
+  page: '/icon.svg'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'
+}
+Error: Cannot find module '../../chunks/[turbopack]_runtime.js'
+Require stack:
+- /home/pedalsup/Meet/Work/kushalkiteapp/.next/server/app/icon.svg/route.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/require.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/load-components.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/utils.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/swc/options.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/swc/index.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/next-config-ts/transpile-config.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/config.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/next.js
+- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/lib/start-server.js
+    at Object.<anonymous> (.next/server/app/icon.svg/route.js:2:17) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array],
+  page: '/icon.svg'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/pedalsup/Meet/Work/kushalkiteapp/.next/server/pages/_app/build-manifest.json'
+}
+ GET /icon.svg?icon.ce1c2e6c.svg 500 in 311ms
+ GET /icon.svg?icon.ce1c2e6c.svg 500 in 41ms
+ ⚠ Found a change in next.config.ts. Restarting the server to apply the changes...
+   ▲ Next.js 15.3.5 (Turbopack)
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.48:3000
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 869ms

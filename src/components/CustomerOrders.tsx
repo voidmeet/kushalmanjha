@@ -368,23 +368,23 @@ export default function CustomerOrders({
             </div>
           </div>
 
-          <Accordion type="multiple" className="w-full">
+          <Accordion type="multiple" className="w-full space-y-4">
             <AccordionItem value="reels" className="border rounded-lg">
-              <AccordionTrigger className="px-4 py-3 hover:no-underline">
+              <AccordionTrigger className="px-5 py-4 hover:no-underline">
                 <div className="flex items-center gap-2 text-base">
                   <Package2 className="h-4 w-4 text-primary" aria-hidden />
                   Reel (Inventory)
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="px-5 pt-4 pb-5">
-                <div className="grid gap-6 sm:grid-cols-3">
+              <AccordionContent className="px-5 pt-5 pb-6">
+                <div className="grid gap-6 sm:gap-8 sm:grid-cols-3">
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="reelInventory">Inventory model</Label>
                     <Select
                       value={reelInventoryId}
                       onValueChange={(v) => setReelInventoryId(v)}
                     >
-                      <SelectTrigger id="reelInventory" className="bg-card">
+                      <SelectTrigger id="reelInventory" className="bg-card h-10">
                         <SelectValue placeholder="Select reel from inventory" />
                       </SelectTrigger>
                       <SelectContent>
@@ -422,7 +422,7 @@ export default function CustomerOrders({
                       step={1}
                       value={reelQty}
                       onChange={(e) => setReelQty(e.target.value.replace(/[^0-9]/g, ""))}
-                      className="bg-card"
+                      className="bg-card h-10"
                     />
                     {reelStockAfter !== null && (
                       <p
@@ -442,14 +442,14 @@ export default function CustomerOrders({
             </AccordionItem>
 
             <AccordionItem value="firki" className="border rounded-lg">
-              <AccordionTrigger className="px-4 py-3 hover:no-underline">
+              <AccordionTrigger className="px-5 py-4 hover:no-underline">
                 <div className="flex items-center gap-2 text-base">
                   <ReceiptIndianRupee className="h-4 w-4 text-primary" aria-hidden />
                   Firki Source
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="px-5 pt-4 pb-5">
-                <div className="grid gap-6 sm:grid-cols-3">
+              <AccordionContent className="px-5 pt-5 pb-6">
+                <div className="grid gap-6 sm:gap-8 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="firkiSource">Source</Label>
                     <Select
@@ -459,7 +459,7 @@ export default function CustomerOrders({
                         if (v === "customer") setFirkiCharge(undefined);
                       }}
                     >
-                      <SelectTrigger id="firkiSource" className="bg-card">
+                      <SelectTrigger id="firkiSource" className="bg-card h-10">
                         <SelectValue placeholder="Select source" />
                       </SelectTrigger>
                       <SelectContent>
@@ -479,7 +479,7 @@ export default function CustomerOrders({
                       step={1}
                       value={firkiQty}
                       onChange={(e) => setFirkiQty(e.target.value.replace(/[^0-9]/g, ""))}
-                      className="bg-card"
+                      className="bg-card h-10"
                     />
                   </div>
 
@@ -490,7 +490,7 @@ export default function CustomerOrders({
                       onValueChange={(v: "60" | "70") => setFirkiCharge(v)}
                       disabled={!firkiFromKushal}
                     >
-                      <SelectTrigger id="firkiCharge" className="bg-card">
+                      <SelectTrigger id="firkiCharge" className="bg-card h-10">
                         <SelectValue placeholder={firkiFromKushal ? "Select charge" : "No charge"} />
                       </SelectTrigger>
                       <SelectContent>

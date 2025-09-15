@@ -57,11 +57,15 @@ export interface Order {
 export interface InventoryReel {
   id: string
   metersAvailable: number
+  reels?: number
+  reelSize?: number
+  productName?: string
+  brandName?: string
 }
 
 type BagItem =
   | { kind: "order"; orderId: string; customer: string; meters: number }
-  | { kind: "inventory"; reelId: string; meters: number }
+  | { kind: "inventory"; reelId: string; meters: number; label?: string }
 
 interface Bag {
   bagNumber: number
@@ -95,7 +99,17 @@ export default function DailyBags({
   const [partialNeedsInventory, setPartialNeedsInventory] = React.useState<{
     open: boolean
     lastBagIndex: number | null
-  }>({ open: false, lastBagIndex: null })
+    missingMeters: number
+  }>({ open: false, lastBagIndex: null, missingMeters: 0 })
+  const [confirmTopUp, setConfirmTopUp] = React.useState<{
+    open: boolean
+    missingMeters: number
+  }>({ open: false, missingMeters: 0 })
+  const [manualTopUp, setManualTopUp] = React.useState<{
+    open: boolean
+    lastBagIndex: number | null
+    allocations: Record<string, number>
+  }>({ open: false, lastBagIndex: null, allocations: {} })
   const [workingInventory, setWorkingInventory] =
     React.useState<InventoryReel[]>(inventory)
 
@@ -151,12 +165,18 @@ export default function DailyBags({
           id: number
           reels: number
           reelSize: number
+          productName?: string
+          brandName?: string
         }> = await res.json()
         if (!isMounted) return
         setApiInventory(
           data.map((d) => ({
             id: String(d.id),
             metersAvailable: (d.reels ?? 0) * (d.reelSize ?? 0),
+            reels: d.reels ?? 0,
+            reelSize: d.reelSize ?? 0,
+            productName: d.productName,
+            brandName: d.brandName,
           }))
         )
       } catch {}
@@ -169,6 +189,27 @@ export default function DailyBags({
     // prefer explicit props; fallback to API-loaded inventory
     setWorkingInventory(inventory.length > 0 ? inventory : apiInventory)
   }, [inventory, apiInventory])
+
+  // Persistence: load on mount
+  React.useEffect(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('daily_bags_state') : null
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed.bags)) setBags(parsed.bags)
+        if (Array.isArray(parsed.inventory)) setWorkingInventory(parsed.inventory)
+      }
+    } catch {}
+  }, [])
+
+  // Persistence: save on change
+  React.useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return
+      const payload = JSON.stringify({ bags, inventory: workingInventory })
+      localStorage.setItem('daily_bags_state', payload)
+    } catch {}
+  }, [bags, workingInventory])
 
   const sourceOrders = React.useMemo(() => (orders.length > 0 ? orders : apiOrders), [orders, apiOrders])
 
@@ -267,10 +308,8 @@ export default function DailyBags({
 
       setBags(baseBags)
       if (last && last.totalMeters < targetMetersPerBag) {
-        setPartialNeedsInventory({ open: true, lastBagIndex: lastIdx })
-        toast("Partial bag detected", {
-          description: "You can auto-fill the remaining meters from inventory.",
-        } as any)
+        const missing = targetMetersPerBag - last.totalMeters
+        setConfirmTopUp({ open: true, missingMeters: missing })
       } else {
         toast.success("Bags created")
       }
@@ -334,6 +373,68 @@ export default function DailyBags({
     }
 
     setPartialNeedsInventory({ open: false, lastBagIndex: null })
+  }
+
+  function openManualSelector() {
+    if (!bags) return
+    const lastIdx = bags.length - 1
+    const last = bags[lastIdx]
+    const missing = Math.max(0, targetMetersPerBag - (last?.totalMeters ?? 0))
+    setManualTopUp({ open: true, lastBagIndex: lastIdx, allocations: {} })
+    setPartialNeedsInventory({ open: false, lastBagIndex: lastIdx, missingMeters: missing })
+  }
+
+  function applyManualTopUp() {
+    if (!bags || manualTopUp.lastBagIndex == null) return
+    const idx = manualTopUp.lastBagIndex
+    const bag = { ...bags[idx] }
+    const missing = Math.max(0, targetMetersPerBag - bag.totalMeters)
+
+    const entries = Object.entries(manualTopUp.allocations).filter(([, v]) => (v ?? 0) > 0)
+    // Convert reels to meters
+    const invMap = new Map(workingInventory.map((r) => [r.id, r]))
+    const sumMeters = entries.reduce((s, [id, reels]) => {
+      const inv = invMap.get(id)
+      const size = inv?.reelSize ?? 0
+      return s + (reels * size)
+    }, 0)
+    if (sumMeters !== missing) {
+      toast.error(`Allocation must equal exactly ${missing} meters`)
+      return
+    }
+
+    const invCopy = workingInventory.map((r) => ({ ...r }))
+    const newItems: BagItem[] = [...bag.items]
+    for (const [reelId, reelsToTake] of entries) {
+      const inv = invCopy.find((r) => r.id === reelId)
+      if (!inv) {
+        toast.error("Selected inventory not found")
+        return
+      }
+      const size = inv.reelSize ?? 0
+      const meters = reelsToTake * size
+      const availableReels = inv.reels ?? Math.floor((inv.metersAvailable || 0) / size)
+      if (reelsToTake > availableReels) {
+        toast.error("Allocation exceeds available reels")
+        return
+      }
+      inv.reels = (inv.reels ?? availableReels) - reelsToTake
+      inv.metersAvailable = (inv.reels ?? 0) * (inv.reelSize ?? 0)
+      const label = inv.brandName && inv.productName ? `${inv.brandName} — ${inv.productName} (${inv.reelSize ?? 0} m)` : undefined
+      newItems.push({ kind: "inventory", reelId, meters, label })
+    }
+
+    bag.items = newItems
+    bag.totalMeters += sumMeters
+    bag.filledFromInventory += sumMeters
+
+    const nextBags = [...bags]
+    nextBags[idx] = bag
+    setBags(nextBags)
+    setWorkingInventory(invCopy)
+    onInventoryUpdate?.(invCopy)
+    setManualTopUp({ open: false, lastBagIndex: null, allocations: {} })
+    toast.success("Bag completed to exact target")
   }
 
   function keepPartialBag() {
@@ -416,6 +517,28 @@ export default function DailyBags({
     return { totalOrders, totalBags, totalBagMeters, partial }
   }, [sourceOrders, bags, targetMetersPerBag])
 
+  const canCreateBags = React.useMemo(() => sourceOrders.length > 0, [sourceOrders.length])
+
+  function restoreInventoryFromBag(bag: Bag) {
+    const invCopy = workingInventory.map((r) => ({ ...r }))
+    bag.items.forEach((it) => {
+      if (it.kind === "inventory") {
+        const inv = invCopy.find((r) => r.id === it.reelId)
+        if (inv) {
+          if (inv.reelSize && inv.reelSize > 0) {
+            const reelsToRestore = Math.round(it.meters / inv.reelSize)
+            inv.reels = (inv.reels ?? 0) + reelsToRestore
+            inv.metersAvailable = (inv.reels ?? 0) * (inv.reelSize ?? 0)
+          } else {
+            inv.metersAvailable += it.meters
+          }
+        }
+      }
+    })
+    setWorkingInventory(invCopy)
+    onInventoryUpdate?.(invCopy)
+  }
+
   return (
     <section
       className={[
@@ -450,7 +573,7 @@ export default function DailyBags({
           </DropdownMenu>
           <Button
             onClick={handleCreateBags}
-            disabled={isCreating || sourceOrders.length === 0}
+            disabled={isCreating || !canCreateBags}
             className="bg-primary text-primary-foreground hover:opacity-90"
           >
             {isCreating ? (
@@ -617,7 +740,7 @@ export default function DailyBags({
             </div>
           </div>
           <div className="grid gap-4 sm:gap-5">
-            {bags.map((bag) => (
+            {bags.map((bag, bagIdx) => (
               <div
                 key={bag.bagNumber}
                 className="rounded-lg border p-4 bg-secondary/40 hover:bg-secondary/60 transition-colors"
@@ -647,6 +770,26 @@ export default function DailyBags({
                     <Badge variant={bag.totalMeters >= targetMetersPerBag ? "default" : "outline"}>
                       {bag.totalMeters >= targetMetersPerBag ? "Complete" : "Partial"}
                     </Badge>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setManualTopUp({ open: true, lastBagIndex: bagIdx, allocations: {} })
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        restoreInventoryFromBag(bag)
+                        setBags((prev) => (prev ? prev.filter((b) => b.bagNumber !== bag.bagNumber) : prev))
+                        toast.success(`Bag #${bag.bagNumber} deleted`)
+                      }}
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </div>
 
@@ -677,7 +820,7 @@ export default function DailyBags({
                             )}
                           </TableCell>
                           <TableCell className="break-words">
-                            {it.kind === "order" ? it.orderId : it.reelId}
+                            {it.kind === "order" ? it.orderId : (it.label || it.reelId)}
                           </TableCell>
                           <TableCell className="min-w-0">
                             {it.kind === "order" ? (
@@ -700,32 +843,99 @@ export default function DailyBags({
         </>
       )}
 
-      <Dialog
-        open={partialNeedsInventory.open}
-        onOpenChange={(open) => setPartialNeedsInventory((s) => ({ ...s, open }))}
-      >
+      {/* Step 1: Confirm that bag is lacking X meters and propose Kushal top-up */}
+      <Dialog open={confirmTopUp.open} onOpenChange={(open) => setConfirmTopUp((s) => ({ ...s, open }))}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add from Inventory?</DialogTitle>
+            <DialogTitle>Bag is short of target</DialogTitle>
             <DialogDescription>
-              A partial bag was created with less than {targetMetersPerBag.toLocaleString()} meters.
-              Would you like to auto-select inventory reels to fill the remaining meters?
+              The last bag is lacking {confirmTopUp.missingMeters.toLocaleString()} meters to reach {targetMetersPerBag.toLocaleString()} meters.
+              Would you like to add from Kushal inventory to complete it?
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-lg border bg-muted/40 p-3">
-            <div className="text-sm text-muted-foreground">
-              Available inventory reels:{" "}
-              <span className="text-foreground font-medium">
-                {workingInventory.filter((r) => r.metersAvailable > 0).length}
-              </span>
+          <DialogFooter className="gap-2 sm:gap-3">
+            <Button variant="secondary" onClick={() => setConfirmTopUp({ open: false, missingMeters: 0 })}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmTopUp({ open: false, missingMeters: 0 })
+                // proceed to manual selector
+                openManualSelector()
+              }}
+              className="bg-primary text-primary-foreground"
+            >
+              Choose from inventory
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Step 2: Manual selector to allocate exact missing meters */}
+      <Dialog open={manualTopUp.open} onOpenChange={(open) => setManualTopUp((s) => ({ ...s, open }))}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Allocate inventory to complete bag</DialogTitle>
+            <DialogDescription>
+              Select whole reels by product. The total meters must exactly equal the missing amount.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
+            {(() => {
+              const miss = bags && manualTopUp.lastBagIndex != null ? Math.max(0, targetMetersPerBag - (bags[manualTopUp.lastBagIndex]?.totalMeters ?? 0)) : 0
+              const invMap = new Map(workingInventory.map((r) => [r.id, r]))
+              const current = Object.entries(manualTopUp.allocations).reduce((s, [id, reels]) => {
+                const size = invMap.get(id)?.reelSize ?? 0
+                return s + (reels * size)
+              }, 0)
+              return (
+                <div className="text-sm">
+                  Missing: <span className="font-medium">{miss.toLocaleString()} m</span>
+                  <span className="ml-2 text-muted-foreground">Allocated: {current.toLocaleString()} m</span>
+                </div>
+              )
+            })()}
+            <div className="max-h-64 overflow-auto divide-y">
+              {workingInventory.map((r) => {
+                const reelsAvail = r.reels ?? (r.reelSize ? Math.floor((r.metersAvailable || 0) / r.reelSize) : 0)
+                const label = r.brandName && r.productName
+                  ? `${r.brandName} — ${r.productName} (${r.reelSize ?? 0} m)`
+                  : `Reel #${r.id} (${r.reelSize ?? 0} m)`
+                return (
+                  <div key={r.id} className="py-2 flex items-center justify-between gap-3">
+                    <div className="text-sm">
+                      <div className="font-medium">{label}</div>
+                      <div className="text-muted-foreground">
+                        {reelsAvail} reels available • {(r.metersAvailable || 0).toLocaleString()} m
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Reels</span>
+                      <input
+                        aria-label={`Allocate reels from ${label}`}
+                        className="h-9 w-24 rounded-md border bg-background px-3 text-right"
+                        type="number"
+                        min={0}
+                        max={reelsAvail}
+                        step={1}
+                        value={manualTopUp.allocations[r.id] ?? 0}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(Number(e.target.value || 0), reelsAvail))
+                          setManualTopUp((s) => ({ ...s, allocations: { ...s.allocations, [r.id]: val } }))
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-3">
-            <Button variant="secondary" onClick={keepPartialBag}>
-              No, keep partial
+            <Button variant="secondary" onClick={() => setManualTopUp({ open: false, lastBagIndex: null, allocations: {} })}>
+              Cancel
             </Button>
-            <Button onClick={topUpWithInventory} className="bg-primary text-primary-foreground">
-              Yes, add from inventory
+            <Button onClick={applyManualTopUp} className="bg-primary text-primary-foreground">
+              Apply
             </Button>
           </DialogFooter>
         </DialogContent>
