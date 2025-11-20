@@ -211,7 +211,22 @@ export default function DailyBags({
     } catch {}
   }, [bags, workingInventory])
 
-  const sourceOrders = React.useMemo(() => (orders.length > 0 ? orders : apiOrders), [orders, apiOrders])
+  const allOrders = React.useMemo(() => (orders.length > 0 ? orders : apiOrders), [orders, apiOrders])
+
+  const usedOrderIds = React.useMemo(() => {
+    const ids = new Set<string>()
+    bags?.forEach((bag) => {
+      bag.items.forEach((item) => {
+        if (item.kind === "order") ids.add(item.orderId)
+      })
+    })
+    return ids
+  }, [bags])
+
+  const sourceOrders = React.useMemo(() => {
+    if (usedOrderIds.size === 0) return allOrders
+    return allOrders.filter((order) => !usedOrderIds.has(order.id))
+  }, [allOrders, usedOrderIds])
 
   const sortedOrders = React.useMemo(() => {
     const copy = [...sourceOrders]
@@ -294,19 +309,35 @@ export default function DailyBags({
 
   async function handleCreateBags() {
     try {
+      if (!canCreateBags) {
+        toast("All available orders are already in bags")
+        return
+      }
+
       setIsCreating(true)
       setStatusText("Optimizing pack plan…")
       await delay(500)
 
       const baseBags = simulateCreateBags(sortedOrders)
+      if (baseBags.length === 0) {
+        toast("No new orders to bag")
+        return
+      }
+
       setStatusText("Finalizing bags…")
       await delay(600)
 
-      // If last bag is partial, prompt for inventory top-up
-      const lastIdx = baseBags.length > 0 ? baseBags.length - 1 : -1
-      const last = lastIdx >= 0 ? baseBags[lastIdx] : null
+      const bagOffset = bags?.length ?? 0
+      const renumbered = baseBags.map((bag, idx) => ({
+        ...bag,
+        bagNumber: bagOffset + idx + 1,
+      }))
+      const nextBags = [...(bags ?? []), ...renumbered]
 
-      setBags(baseBags)
+      // If last newly created bag is partial, prompt for inventory top-up
+      const last = renumbered.length > 0 ? renumbered[renumbered.length - 1] : null
+
+      setBags(nextBags)
       if (last && last.totalMeters < targetMetersPerBag) {
         const missing = targetMetersPerBag - last.totalMeters
         setConfirmTopUp({ open: true, missingMeters: missing })

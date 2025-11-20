@@ -251,12 +251,19 @@ Error: Route "/api/orders/[id]" used `params.id`. `params` should be awaited bef
  GET /api/orders?limit=50&order=desc 200 in 292ms
  GET /api/orders/6 200 in 316ms
  GET /api/orders/4 200 in 325ms
-home/pedalsup/Meet/Work/kushalkiteapp/.next/server/app/icon.svg/route.js
-- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/require.js
-- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/load-components.js
-- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/utils.js
-- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/swc/options.js
-- /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/swc/index.js
+ GET / 200 in 53ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 223ms
+ GET /icon.svg?icon.ce1c2e6c.svg 200 in 221ms
+ POST /api/auth/login 200 in 19ms
+ GET /api/inventory 200 in 967ms
+ GET /api/inventory 200 in 288ms
+ GET /api/inventory 200 in 317ms
+ GET /api/inventory 200 in 294ms
+ GET /api/orders?limit=50&order=desc 200 in 894ms
+ GET /api/orders?limit=50&order=desc 200 in 289ms
+ GET /api/orders/6 200 in 350ms
+ GET /api/orders/4 200 in 350ms
+lkiteapp/node_modules/next/dist/build/swc/index.js
 - /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/build/next-config-ts/transpile-config.js
 - /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/config.js
 - /home/pedalsup/Meet/Work/kushalkiteapp/node_modules/next/dist/server/next.js

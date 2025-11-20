@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { PackagePlus, PackageSearch, Boxes, Package2, Undo } from "lucide-react"
+import { PackagePlus, PackageSearch, Boxes, Package2, Undo, Tag, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -46,6 +46,7 @@ type InventoryItem = {
   model: string
   boxes: number
   reels: number
+  cord?: number | null
 }
 
 type CreateItem = Omit<InventoryItem, "id">
@@ -54,6 +55,28 @@ type UpdateItem = Partial<Omit<InventoryItem, "id">>
 
 type SortKey = "brand" | "model" | "boxes" | "reels"
 type SortDir = "asc" | "desc"
+
+type CatalogEntry = {
+  id: string
+  brand: string
+  product: string
+}
+
+type ProductRecord = {
+  id: number
+  brandName: string
+  name: string
+  cord: number
+  reelSize: number
+  category: string | null
+}
+
+type ProductOption = {
+  entryId: string
+  label: string
+  detail?: string
+  productId: string
+}
 
 export interface InventoryManagementProps {
   className?: string
@@ -91,7 +114,7 @@ export default function InventoryManagement({
       try {
         const res = await fetch("/api/inventory")
         if (!res.ok) throw new Error("Failed to load inventory")
-        const data: Array<{ id: number; productName: string; brandName: string; boxes: number; reels: number }> = await res.json()
+        const data: Array<{ id: number; productName: string; brandName: string; boxes: number; reels: number; cord?: number | null }> = await res.json()
         if (!isMounted) return
         setItems(
           data.map((d) => ({
@@ -100,6 +123,7 @@ export default function InventoryManagement({
             model: d.productName,
             boxes: d.boxes ?? 0,
             reels: d.reels ?? 0,
+            cord: d.cord ?? null,
           }))
         )
       } catch (e) {
@@ -122,36 +146,162 @@ export default function InventoryManagement({
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
+  const [catalogEntries, setCatalogEntries] = React.useState<CatalogEntry[]>([])
+  const [catalogBrand, setCatalogBrand] = React.useState("")
+  const [catalogProduct, setCatalogProduct] = React.useState("")
+  const [allProducts, setAllProducts] = React.useState<ProductRecord[]>([])
+  const [productsLoaded, setProductsLoaded] = React.useState(false)
+  const [productOptions, setProductOptions] = React.useState<ProductOption[]>([])
+  const [selectedCatalogId, setSelectedCatalogId] = React.useState("")
+
   // Add form state
   const [brand, setBrand] = React.useState<string>("")
   const [productId, setProductId] = React.useState<string>("")
-  const [productOptions, setProductOptions] = React.useState<Array<{ id: string; label: string }>>([])
   const [model, setModel] = React.useState<string>("") // keep for edit table display
   const [boxes, setBoxes] = React.useState<string>("")
   const [reels, setReels] = React.useState<string>("")
+  const [selectedCord, setSelectedCord] = React.useState<string>("")
+
+  // Load catalog entries from storage
+  React.useEffect(() => {
+    try {
+      if (typeof window === "undefined") return
+      const saved = localStorage.getItem("inventory_catalog_entries")
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          setCatalogEntries(parsed)
+        }
+      }
+    } catch {}
+  }, [])
+
+  React.useEffect(() => {
+    try {
+      if (typeof window === "undefined") return
+      localStorage.setItem("inventory_catalog_entries", JSON.stringify(catalogEntries))
+    } catch {}
+  }, [catalogEntries])
+
+  React.useEffect(() => {
+    setSelectedCatalogId("")
+    setProductId("")
+  }, [brand])
+
+  React.useEffect(() => {
+    if (!selectedCatalogId) return
+    const exists = catalogEntries.some(
+      (entry) => entry.id === selectedCatalogId && entry.brand.trim().toLowerCase() === brand.trim().toLowerCase(),
+    )
+    if (!exists) {
+      setSelectedCatalogId("")
+      setProductId("")
+    }
+  }, [catalogEntries, selectedCatalogId, brand])
+
+  React.useEffect(() => {
+    if (!selectedCatalogId) return
+    const option = productOptions.find((opt) => opt.entryId === selectedCatalogId)
+    if (!option) {
+      setSelectedCatalogId("")
+      setProductId("")
+      return
+    }
+    if (option.productId !== productId) {
+      setProductId(option.productId)
+    }
+  }, [productOptions, selectedCatalogId, productId])
 
   // Load products when brand changes
   React.useEffect(() => {
-    setProductId("")
-    setProductOptions([])
-    if (!brand) return
+    let isMounted = true
     ;(async () => {
       try {
-        const params = new URLSearchParams({ brand })
-        const res = await fetch(`/api/products?${params.toString()}`)
+        const res = await fetch("/api/products")
         if (!res.ok) throw new Error("Failed to load products")
-        const data: Array<{ id: number; name: string; cord: number; reelSize: number; category: string | null }> = await res.json()
-        setProductOptions(
-          data.map((p) => ({
-            id: String(p.id),
-            label: `${p.name}${p.category ? ` (${p.category})` : ""} • ${p.cord}-cord • ${p.reelSize}m`,
-          }))
-        )
-      } catch (e) {
-        setProductOptions([])
+        const data: ProductRecord[] = await res.json()
+        if (!isMounted) return
+        setAllProducts(data)
+      } catch (error) {
+        if (!isMounted) return
+        setAllProducts([])
+      } finally {
+        if (!isMounted) return
+        setProductsLoaded(true)
       }
     })()
-  }, [brand])
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Build product options from catalog entries once products are loaded
+  React.useEffect(() => {
+    if (!brand || !productsLoaded) {
+      setProductOptions([])
+      return
+    }
+
+    const allowedEntries = catalogEntries.filter(
+      (entry) => entry.brand.trim().toLowerCase() === brand.trim().toLowerCase(),
+    )
+    if (allowedEntries.length === 0) {
+      setProductOptions([])
+      return
+    }
+
+    const cordFilter = selectedCord ? Number(selectedCord) : null
+    const options = allowedEntries.map((entry) => {
+      const normalizedName = entry.product.trim().toLowerCase()
+      const normalizedBrand = entry.brand.trim().toLowerCase()
+
+      const primaryMatch = allProducts.find((product) => {
+        const brandMatch = product.brandName.trim().toLowerCase() === normalizedBrand
+        const nameMatch = product.name.trim().toLowerCase() === normalizedName
+        const cordMatch = cordFilter ? product.cord === cordFilter : true
+        return brandMatch && nameMatch && cordMatch
+      })
+
+      const fallbackMatch = primaryMatch
+        ? primaryMatch
+        : allProducts.find((product) => {
+            if (cordFilter && product.cord !== cordFilter) return false
+            return product.name.trim().toLowerCase() === normalizedName
+          })
+
+      const match = fallbackMatch ?? null
+      return {
+        entryId: entry.id,
+        label: entry.product,
+        detail: match ? `${match.cord}-cord • ${match.reelSize}m` : undefined,
+        productId: match ? String(match.id) : "",
+      }
+    })
+
+    setProductOptions(options)
+  }, [brand, catalogEntries, allProducts, productsLoaded, selectedCord])
+
+  // Ensure selected brand remains valid if catalog changes
+  React.useEffect(() => {
+    if (!brand) return
+    if (catalogEntries.length === 0) return
+    const exists = catalogEntries.some((entry) => entry.brand.toLowerCase() === brand.toLowerCase())
+    if (!exists) {
+      setBrand("")
+      setProductId("")
+      setProductOptions([])
+    }
+  }, [catalogEntries, brand])
+
+  const catalogBrands = React.useMemo(() => {
+    const uniques = new Set<string>()
+    catalogEntries.forEach((entry) => {
+      uniques.add(entry.brand)
+    })
+    return Array.from(uniques)
+  }, [catalogEntries])
+
+  const selectableBrands = catalogBrands
 
   function validateValues(values: { brand: string; productId: string; boxes: string; reels: string }) {
     const errs: string[] = []
@@ -175,16 +325,60 @@ export default function InventoryManagement({
     setModel("")
     setBoxes("")
     setReels("")
+    setSelectedCord("")
+    setSelectedCatalogId("")
     setError(null)
+  }
+
+  function handleAddCatalogEntry(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmedBrand = catalogBrand.trim()
+    const trimmedProduct = catalogProduct.trim()
+    if (!trimmedBrand || !trimmedProduct) {
+      toast.error("Brand and product name are required.")
+      return
+    }
+    const exists = catalogEntries.some(
+      (entry) =>
+        entry.brand.toLowerCase() === trimmedBrand.toLowerCase() &&
+        entry.product.toLowerCase() === trimmedProduct.toLowerCase(),
+    )
+    if (exists) {
+      toast("This brand/product is already in the catalog.")
+      return
+    }
+    const next: CatalogEntry = {
+      id: generateId(),
+      brand: trimmedBrand,
+      product: trimmedProduct,
+    }
+    setCatalogEntries((prev) => [next, ...prev])
+    setCatalogProduct("")
+    toast.success("Saved to catalog.")
+  }
+
+  function handleRemoveCatalogEntry(id: string) {
+    setCatalogEntries((prev) => prev.filter((entry) => entry.id !== id))
+    toast("Removed from catalog.")
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    const { errs, boxesNum, reelsNum } = validateValues({ brand, productId, boxes, reels })
+    const { errs, boxesNum, reelsNum } = validateValues({
+      brand,
+      productId: selectedCatalogId || productId,
+      boxes,
+      reels,
+    })
     if (errs.length) {
       setError(errs.join(" "))
       toast.error("Please fix the form errors.")
+      return
+    }
+    if (!productId) {
+      setError("Selected product is not linked to the database yet.")
+      toast.error("Product not found in database.")
       return
     }
     setSubmitting(true)
@@ -206,6 +400,7 @@ export default function InventoryManagement({
         model: created.productName,
         boxes: created.boxes ?? 0,
         reels: created.reels ?? 0,
+        cord: created.cord ?? null,
       }
       setItems((prev) => [mapped, ...prev])
       toast.success("Item added to inventory.")
@@ -276,6 +471,14 @@ export default function InventoryManagement({
   const [editReels, setEditReels] = React.useState("")
   const [editError, setEditError] = React.useState<string | null>(null)
 
+  const editBrandOptions = React.useMemo(() => {
+    const opts = new Set(selectableBrands)
+    if (editing?.brand) {
+      opts.add(editing.brand)
+    }
+    return Array.from(opts)
+  }, [selectableBrands, editing?.brand])
+
   function openEdit(item: InventoryItem) {
     setEditing(item)
     setEditBrand(item.brand)
@@ -317,6 +520,7 @@ export default function InventoryManagement({
         model: updated.product.name,
         boxes: updated.boxes,
         reels: updated.reels,
+        cord: updated.product?.cord ?? null,
       }
       setItems((prev) => prev.map((it) => (it.id === editing.id ? mapped : it)))
       toast.success("Item updated.")
@@ -351,6 +555,85 @@ export default function InventoryManagement({
 
   return (
     <section className={cn("w-full max-w-full space-y-6", className)} style={style}>
+      {/* Brand/Product Catalog */}
+      <div className="w-full rounded-2xl border bg-card shadow-sm">
+        <div className="flex items-center gap-2 border-b px-4 py-3 sm:px-6">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <Tag className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold sm:text-lg">Brand Catalog</h2>
+            <p className="text-xs text-muted-foreground sm:text-sm">
+              Save the brand/product pairs you want to reuse while adding inventory.
+            </p>
+          </div>
+        </div>
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
+          <form onSubmit={handleAddCatalogEntry} className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+            <div className="lg:col-span-2">
+              <Label htmlFor="catalog-brand">Brand</Label>
+              <Input
+                id="catalog-brand"
+                value={catalogBrand}
+                onChange={(e) => setCatalogBrand(e.target.value)}
+                placeholder="e.g. Kushal"
+                list="brand-suggestions"
+                className="mt-1.5"
+              />
+              <datalist id="brand-suggestions">
+                {brands.map((b) => (
+                  <option key={b} value={b} />
+                ))}
+              </datalist>
+            </div>
+            <div className="lg:col-span-2">
+              <Label htmlFor="catalog-product">Product name</Label>
+              <Input
+                id="catalog-product"
+                value={catalogProduct}
+                onChange={(e) => setCatalogProduct(e.target.value)}
+                placeholder="e.g. Super Sankal 9 cord"
+                className="mt-1.5"
+              />
+            </div>
+            <div className="lg:col-span-1 flex items-end">
+              <Button type="submit" className="w-full">
+                Add to catalog
+              </Button>
+            </div>
+          </form>
+
+          {catalogEntries.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              No catalog entries yet. Add a brand and product name to create your shortlist.
+            </p>
+          ) : (
+            <ul className="mt-4 flex flex-wrap gap-3">
+              {catalogEntries.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm shadow-sm"
+                >
+                  <div>
+                    <div className="font-semibold">{entry.brand}</div>
+                    <div className="text-xs text-muted-foreground">{entry.product}</div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveCatalogEntry(entry.id)}
+                    aria-label={`Remove ${entry.brand} ${entry.product}`}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
       {/* Add / Edit Form */}
       <div className="w-full rounded-2xl border bg-card shadow-sm">
         <div className="flex items-center gap-2 border-b px-4 py-3 sm:px-6">
@@ -365,40 +648,63 @@ export default function InventoryManagement({
           </div>
         </div>
         <form onSubmit={handleSubmit} className="px-4 py-4 sm:px-6 sm:py-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="min-w-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="min-w-0 lg:col-span-2">
               <Label htmlFor="brand">Brand</Label>
               <Select
                 value={brand || undefined}
-                onValueChange={(v) => setBrand(v)}
+                onValueChange={(v) => {
+                  setBrand(v)
+                  setSelectedCatalogId("")
+                  setProductId("")
+                }}
+                disabled={selectableBrands.length === 0}
               >
                 <SelectTrigger id="brand" aria-label="Select brand" className="mt-1.5">
                   <SelectValue placeholder="Choose brand" />
                 </SelectTrigger>
                 <SelectContent>
-                  {brands.length > 0 ? (
-                    brands.map((b) => (
+                  {selectableBrands.length > 0 ? (
+                    selectableBrands.map((b) => (
                       <SelectItem key={b} value={b}>
                         {b}
                       </SelectItem>
                     ))
                   ) : (
-                    <>
-                      <SelectItem value="Chain">Chain</SelectItem>
-                      <SelectItem value="Panda">Panda</SelectItem>
-                      <SelectItem value="Genda">Genda</SelectItem>
-                      <SelectItem value="AK56">AK56</SelectItem>
-                      <SelectItem value="Others">Others</SelectItem>
-                    </>
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Add brands in the catalog above first.
+                    </div>
                   )}
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 lg:col-span-1">
+              <Label htmlFor="cord">Cord</Label>
+              <Select
+                value={selectedCord || "any"}
+                onValueChange={(v) => setSelectedCord(v === "any" ? "" : v)}
+                disabled={!brand}
+              >
+                <SelectTrigger id="cord" className="mt-1.5">
+                  <SelectValue placeholder="Choose cord" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any cord</SelectItem>
+                  <SelectItem value="6">6 cord</SelectItem>
+                  <SelectItem value="9">9 cord</SelectItem>
+                  <SelectItem value="12">12 cord</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0 lg:col-span-2">
               <Label htmlFor="product">Product</Label>
               <Select
-                value={productId || undefined}
-                onValueChange={(v) => setProductId(v)}
+                value={selectedCatalogId || undefined}
+                onValueChange={(entryId) => {
+                  setSelectedCatalogId(entryId)
+                  const option = productOptions.find((opt) => opt.entryId === entryId)
+                  setProductId(option?.productId ?? "")
+                }}
                 disabled={!brand}
               >
                 <SelectTrigger id="product" className="mt-1.5">
@@ -407,12 +713,23 @@ export default function InventoryManagement({
                 <SelectContent>
                   {productOptions.length === 0 ? (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      {brand ? "No products found" : "Select brand first"}
+                      {brand
+                        ? productsLoaded
+                          ? "No matching products found in the database for this brand."
+                          : "Loading products…"
+                        : selectableBrands.length === 0
+                          ? "Add a brand in the catalog first."
+                          : "Select brand first"}
                     </div>
                   ) : (
                     productOptions.map((opt) => (
-                      <SelectItem key={opt.id} value={opt.id}>
-                        {opt.label}
+                      <SelectItem key={opt.entryId} value={opt.entryId}>
+                        <span className="flex flex-col text-left">
+                          <span>{opt.label}</span>
+                          {opt.detail ? (
+                            <span className="text-xs text-muted-foreground">{opt.detail}</span>
+                          ) : null}
+                        </span>
                       </SelectItem>
                     ))
                   )}
@@ -526,6 +843,7 @@ export default function InventoryManagement({
                     Model {headerSortIndicator("model")}
                   </button>
                 </TableHead>
+                <TableHead className="whitespace-nowrap">Cord</TableHead>
                 <TableHead className="whitespace-nowrap">
                   <button
                     type="button"
@@ -588,6 +906,9 @@ export default function InventoryManagement({
                     <TableCell className="align-middle">
                       <span className="min-w-0 break-words">{it.model}</span>
                     </TableCell>
+                      <TableCell className="align-middle">
+                        {typeof it.cord === "number" ? `${it.cord}-cord` : "-"}
+                      </TableCell>
                     <TableCell className="align-middle">{it.boxes}</TableCell>
                     <TableCell className="align-middle">{it.reels}</TableCell>
                     <TableCell className="align-middle text-right">
@@ -694,11 +1015,17 @@ export default function InventoryManagement({
                   <SelectValue placeholder="Choose brand" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(brands.length ? brands : ["Chain", "Panda", "Genda", "AK56", "Others"]).map((b) => (
-                    <SelectItem key={b} value={b}>
-                      {b}
-                    </SelectItem>
-                  ))}
+                  {editBrandOptions.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Add a brand in the catalog to edit.
+                    </div>
+                  ) : (
+                    editBrandOptions.map((b) => (
+                      <SelectItem key={b} value={b}>
+                        {b}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
