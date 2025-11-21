@@ -49,6 +49,8 @@ type InventoryItem = {
   name: string;
   stock: number;
   productId: number;
+  cord?: number;
+  reelSize?: number;
 };
 
 type Order = {
@@ -104,6 +106,8 @@ export default function CustomerOrders({
   const [firkiCharge, setFirkiCharge] = useState<"60" | "70" | undefined>(undefined);
   const [firkiQty, setFirkiQty] = useState<string>("0");
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Load inventory from DB (only items present in inventory are selectable in orders)
   useEffect(() => {
     let isMounted = true;
@@ -116,7 +120,7 @@ export default function CustomerOrders({
           },
         });
         if (!res.ok) throw new Error("Failed to load inventory");
-        const data: Array<{ id: number; productId: number; productName: string; brandName: string; reels: number }> = await res.json();
+        const data: Array<{ id: number; productId: number; productName: string; brandName: string; reels: number; cord?: number; reelSize?: number }> = await res.json();
         if (!isMounted) return;
         setReelInventory(
           data.map((d) => ({
@@ -124,6 +128,8 @@ export default function CustomerOrders({
             name: `${d.brandName} — ${d.productName}`,
             stock: d.reels ?? 0,
             productId: d.productId,
+            cord: d.cord,
+            reelSize: d.reelSize,
           }))
         );
       } catch (e) {
@@ -134,6 +140,8 @@ export default function CustomerOrders({
       isMounted = false;
     };
   }, []);
+
+
 
   // Load existing orders from DB for today/latest view
   useEffect(() => {
@@ -197,7 +205,7 @@ export default function CustomerOrders({
             })
           );
           if (isMounted) setOrders(enriched);
-        } catch {}
+        } catch { }
       } catch (e) {
         // ignore
       }
@@ -262,22 +270,137 @@ export default function CustomerOrders({
       return;
     }
 
+    setIsSubmitting(true);
     try {
       // We have inventory id (inventory row id). We need productId for API.
       // Fetch the inventory row to get productId
-      const invRes = await fetch(`/api/inventory?productId=`); // placeholder to satisfy snippet rules
-      // ... keep existing code ...
-    } catch (e) {
-      // ... keep existing code ...
+      const invRow = reelInventory.find((r) => r.id === reelInventoryId);
+      if (!invRow) {
+        toast.error("Inventory item not found");
+        return;
+      }
+
+      // Resolve productId directly from the selected inventory snapshot
+      const productId = invRow.productId;
+
+      const createRes = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(typeof window !== "undefined" && localStorage.getItem("bearer_token")
+            ? { Authorization: `Bearer ${localStorage.getItem("bearer_token")}` }
+            : {}),
+        },
+        body: JSON.stringify({
+          customer: customerName.trim(),
+          productId,
+          reels: reelQtyNum,
+        }),
+      });
+
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({} as any));
+        const msg = err?.error || "Failed to create order";
+        toast.error(msg);
+        return;
+      }
+
+      const o = await createRes.json();
+
+      // Immediately move order to processing so it appears in Daily Bags flow
+      try {
+        await fetch(`/api/orders/${o.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(typeof window !== "undefined" && localStorage.getItem("bearer_token")
+              ? { Authorization: `Bearer ${localStorage.getItem("bearer_token")}` }
+              : {}),
+          },
+          body: JSON.stringify({ status: "processing" }),
+        });
+      } catch { }
+
+      // Enrich with metersPerReel from detail endpoint
+      let metersPerReel: number | null | undefined = undefined;
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
+        const detailRes = await fetch(`/api/orders/${o.id}`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+        if (detailRes.ok) {
+          const detail: any = await detailRes.json();
+          const meters = detail?.product?.metersPerReel;
+          metersPerReel = typeof meters === "number" ? meters : null;
+        }
+      } catch { }
+
+      const newOrder: Order = {
+        dbId: o.id,
+        id: o.orderId,
+        createdAt: o.createdAt,
+        customerName: o.customer,
+        reel: {
+          source: "kushal",
+          model: o.productName,
+          inventoryId: null,
+          qty: o.reels,
+          metersPerReel,
+        },
+        firki: firkiQtyNum > 0 ? {
+          source: firkiSource,
+          charge: firkiFromKushal && firkiChargeNum ? firkiChargeNum : null,
+          qty: firkiQtyNum,
+        } : null,
+        totalAmount: firkiFromKushal && firkiChargeNum ? (firkiChargeNum * firkiQtyNum) : 0,
+      };
+
+      setOrders((prev) => [newOrder, ...prev]);
+
+      // Refresh inventory snapshot after order (backend already decremented)
+      const invRefresh = await fetch("/api/inventory", {
+        headers: {
+          ...(typeof window !== "undefined" && localStorage.getItem("bearer_token")
+            ? { Authorization: `Bearer ${localStorage.getItem("bearer_token")}` }
+            : {}),
+        },
+      });
+      if (invRefresh.ok) {
+        const invData: Array<{ id: number; productName: string; brandName: string; reels: number; cord?: number; reelSize?: number }> = await invRefresh.json();
+        setReelInventory(
+          invData.map((d) => ({
+            id: String(d.id),
+            name: `${d.brandName} — ${d.productName}`,
+            stock: d.reels ?? 0,
+            productId: (d as any).productId ?? 0,
+            cord: d.cord,
+            reelSize: d.reelSize,
+          }))
+        );
+      }
+
+      toast.success(`Order created • ${o.orderId}`);
+      resetForm();
+    } catch (error) {
+      toast.error("Something went wrong creating the order");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   // Build select options from inventory
-  const reelInventoryOptions = reelInventory.map((item) => ({
-    label: `${item.name} — ${item.stock} in stock`,
-    value: item.id,
-    disabled: item.stock === 0,
-  }));
+  const reelInventoryOptions = reelInventory.map((item) => {
+    const details = [
+      item.cord ? `${item.cord} cord` : null,
+      item.reelSize ? `${item.reelSize}m` : null
+    ].filter(Boolean).join(", ");
+
+    return {
+      label: `${item.name}${details ? ` (${details})` : ""} — ${item.stock} in stock`,
+      value: item.id,
+      disabled: item.stock === 0,
+    };
+  });
 
   const canSubmit = validate().length === 0;
 
@@ -307,18 +430,20 @@ export default function CustomerOrders({
           },
         });
         if (invRefresh.ok) {
-          const invData: Array<{ id: number; productName: string; brandName: string; reels: number; productId?: number }> =
+          const invData: Array<{ id: number; productName: string; brandName: string; reels: number; productId?: number; cord?: number; reelSize?: number }> =
             await invRefresh.json();
           setReelInventory(
             invData.map((d) => ({
               id: String(d.id),
               name: `${d.brandName} — ${d.productName}`,
               stock: d.reels ?? 0,
-              productId: (d as any).productId ?? 0,
+              productId: d.productId ?? 0,
+              cord: d.cord,
+              reelSize: d.reelSize,
             }))
           );
         }
-      } catch {}
+      } catch { }
       toast.success(`Order deleted • ${pendingDelete.orderId}`);
     } catch (e) {
       toast.error("Something went wrong deleting the order");
@@ -524,122 +649,8 @@ export default function CustomerOrders({
               </Button>
               <Button
                 type="button"
-                onClick={async () => {
-                  // Implement backend order creation
-                  const errs = validate();
-                  if (errs.length) {
-                    errs.forEach((e) => toast.error(e));
-                    return;
-                  }
-
-                  try {
-                    // We have inventory id (inventory row id). We need productId for API.
-                    // Fetch the inventory row to get productId
-                    const invRow = reelInventory.find((r) => r.id === reelInventoryId);
-                    if (!invRow) {
-                      toast.error("Inventory item not found");
-                      return;
-                    }
-
-                    // Resolve productId directly from the selected inventory snapshot
-                    const productId = invRow.productId;
-
-                    const createRes = await fetch("/api/orders", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        ...(typeof window !== "undefined" && localStorage.getItem("bearer_token")
-                          ? { Authorization: `Bearer ${localStorage.getItem("bearer_token")}` }
-                          : {}),
-                      },
-                      body: JSON.stringify({
-                        customer: customerName.trim(),
-                        productId,
-                        reels: reelQtyNum,
-                      }),
-                    });
-
-                    if (!createRes.ok) {
-                      const err = await createRes.json().catch(() => ({} as any));
-                      const msg = err?.error || "Failed to create order";
-                      toast.error(msg);
-                      return;
-                    }
-
-                    const o = await createRes.json();
-
-                    // Immediately move order to processing so it appears in Daily Bags flow
-                    try {
-                      await fetch(`/api/orders/${o.id}`, {
-                        method: "PATCH",
-                        headers: {
-                          "Content-Type": "application/json",
-                          ...(typeof window !== "undefined" && localStorage.getItem("bearer_token")
-                            ? { Authorization: `Bearer ${localStorage.getItem("bearer_token")}` }
-                            : {}),
-                        },
-                        body: JSON.stringify({ status: "processing" }),
-                      });
-                    } catch {}
-
-                    // Enrich with metersPerReel from detail endpoint
-                    let metersPerReel: number | null | undefined = undefined;
-                    try {
-                      const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
-                      const detailRes = await fetch(`/api/orders/${o.id}`, {
-                        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                      });
-                      if (detailRes.ok) {
-                        const detail: any = await detailRes.json();
-                        const meters = detail?.product?.metersPerReel;
-                        metersPerReel = typeof meters === "number" ? meters : null;
-                      }
-                    } catch {}
-
-                    const newOrder: Order = {
-                      dbId: o.id,
-                      id: o.orderId,
-                      createdAt: o.createdAt,
-                      customerName: o.customer,
-                      reel: {
-                        source: "kushal",
-                        model: o.productName,
-                        inventoryId: null,
-                        qty: o.reels,
-                        metersPerReel,
-                      },
-                      firki: firkiQtyNum > 0 ? {
-                        source: firkiSource,
-                        charge: firkiFromKushal && firkiChargeNum ? firkiChargeNum : null,
-                        qty: firkiQtyNum,
-                      } : null,
-                      totalAmount: firkiFromKushal && firkiChargeNum ? (firkiChargeNum * firkiQtyNum) : 0,
-                    };
-
-                    setOrders((prev) => [newOrder, ...prev]);
-
-                    // Refresh inventory snapshot after order (backend already decremented)
-                    const invRefresh = await fetch("/api/inventory", {
-                      headers: {
-                        ...(typeof window !== "undefined" && localStorage.getItem("bearer_token")
-                          ? { Authorization: `Bearer ${localStorage.getItem("bearer_token")}` }
-                          : {}),
-                      },
-                    });
-                    if (invRefresh.ok) {
-                      const invData: Array<{ id: number; productName: string; brandName: string; reels: number }> = await invRefresh.json();
-                      setReelInventory(
-                        invData.map((d) => ({ id: String(d.id), name: `${d.brandName} — ${d.productName}`, stock: d.reels ?? 0 }))
-                      );
-                    }
-
-                    toast.success(`Order created • ${o.orderId}`);
-                    resetForm();
-                  } catch (error) {
-                    toast.error("Something went wrong creating the order");
-                  }
-                }}
-                disabled={!canSubmit}
+                onClick={handleAddOrder}
+                disabled={isSubmitting}
                 className="gap-2"
               >
                 <PackagePlus className="h-4 w-4" aria-hidden />

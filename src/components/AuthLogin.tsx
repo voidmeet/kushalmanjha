@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Fingerprint,
 } from "lucide-react";
+import { KiteIcon, ThreadSpoolIcon, BackgroundPattern } from "@/components/KiteDecorations";
 
 type AuthLoginProps = {
   className?: string;
@@ -148,9 +149,12 @@ export default function AuthLogin({
       ].join(" ")}
       aria-label="Admin sign in"
     >
-      <CardHeader className="space-y-2">
+      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+        <BackgroundPattern className="opacity-[0.05]" />
+      </div>
+      <CardHeader className="space-y-2 relative z-10">
         <div className="flex items-center gap-2 text-primary">
-          <Fingerprint className="h-5 w-5" aria-hidden="true" />
+          <KiteIcon className="h-6 w-6" aria-hidden="true" />
           <span className="sr-only">Secure sign in</span>
         </div>
         <CardTitle className="text-xl sm:text-2xl leading-tight">{title}</CardTitle>
@@ -301,7 +305,7 @@ export default function AuthLogin({
         </div>
         <div className="inline-flex items-center gap-1">
           <span className="sr-only">Security</span>
-          <Fingerprint className="h-4 w-4" aria-hidden="true" />
+          <ThreadSpoolIcon className="h-4 w-4" aria-hidden="true" />
           Protected
         </div>
       </CardFooter>

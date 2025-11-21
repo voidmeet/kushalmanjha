@@ -10,8 +10,10 @@ import {
   PackageOpen,
   ArrowUpDown,
   GalleryVerticalEnd,
+  Unlink,
 } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -52,6 +54,12 @@ export interface Order {
   priority?: number
   dueDate?: string
   status?: OrderStatus
+  // New fields for bag logic
+  reels?: number
+  reelSize?: number
+  brand?: string
+  cord?: number
+  productNameRaw?: string
 }
 
 export interface InventoryReel {
@@ -61,11 +69,12 @@ export interface InventoryReel {
   reelSize?: number
   productName?: string
   brandName?: string
+  cord?: number
 }
 
 type BagItem =
-  | { kind: "order"; orderId: string; customer: string; meters: number }
-  | { kind: "inventory"; reelId: string; meters: number; label?: string }
+  | { kind: "order"; orderId: string; customer: string; meters: number; reelSize?: number }
+  | { kind: "inventory"; reelId: string; meters: number; label?: string; reelSize?: number }
 
 interface Bag {
   bagNumber: number
@@ -121,35 +130,40 @@ export default function DailyBags({
   React.useEffect(() => {
     if (orders.length > 0) return
     let isMounted = true
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/orders?status=processing&order=desc&limit=100`)
-        if (!res.ok) return
-        const data: Array<{
-          orderId: string
-          customer: string
-          productName: string
-          brandName: string
-          cord: number
-          reelSize: number
-          reels: number
-          status: string
-          createdAt: string
-        }> = await res.json()
-        if (!isMounted) return
-        setApiOrders(
-          data.map((o) => ({
-            id: o.orderId,
-            customer: o.customer,
-            product: `${o.brandName} — ${o.productName} (${o.cord}-cord • ${o.reelSize}m)`,
-            meters: (o.reels ?? 0) * (o.reelSize ?? 0),
-            priority: undefined,
-            dueDate: undefined,
-            status: (o.status as OrderStatus) || "processing",
-          }))
-        )
-      } catch {}
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`/api/orders?status=processing&order=desc&limit=100`)
+          if (!res.ok) return
+          const data: Array<{
+            orderId: string
+            customer: string
+            productName: string
+            brandName: string
+            cord: number
+            reelSize: number
+            reels: number
+            status: string
+            createdAt: string
+          }> = await res.json()
+          if (!isMounted) return
+          setApiOrders(
+            data.map((o) => ({
+              id: o.orderId,
+              customer: o.customer,
+              product: `${o.brandName} — ${o.productName} (${o.cord}-cord • ${o.reelSize}m)`,
+              meters: (o.reels ?? 0) * (o.reelSize ?? 0),
+              priority: undefined,
+              dueDate: undefined,
+              status: (o.status as OrderStatus) || "processing",
+              reels: o.reels,
+              reelSize: o.reelSize,
+              brand: o.brandName,
+              cord: o.cord,
+              productNameRaw: o.productName,
+            }))
+          )
+        } catch { }
+      })()
     return () => { isMounted = false }
   }, [orders.length])
 
@@ -157,30 +171,30 @@ export default function DailyBags({
   React.useEffect(() => {
     if (inventory.length > 0) return
     let isMounted = true
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/inventory`)
-        if (!res.ok) return
-        const data: Array<{
-          id: number
-          reels: number
-          reelSize: number
-          productName?: string
-          brandName?: string
-        }> = await res.json()
-        if (!isMounted) return
-        setApiInventory(
-          data.map((d) => ({
-            id: String(d.id),
-            metersAvailable: (d.reels ?? 0) * (d.reelSize ?? 0),
-            reels: d.reels ?? 0,
-            reelSize: d.reelSize ?? 0,
-            productName: d.productName,
-            brandName: d.brandName,
-          }))
-        )
-      } catch {}
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`/api/inventory`)
+          if (!res.ok) return
+          const data: Array<{
+            id: number
+            reels: number
+            reelSize: number
+            productName?: string
+            brandName?: string
+          }> = await res.json()
+          if (!isMounted) return
+          setApiInventory(
+            data.map((d) => ({
+              id: String(d.id),
+              metersAvailable: (d.reels ?? 0) * (d.reelSize ?? 0),
+              reels: d.reels ?? 0,
+              reelSize: d.reelSize ?? 0,
+              productName: d.productName,
+              brandName: d.brandName,
+            }))
+          )
+        } catch { }
+      })()
     return () => { isMounted = false }
   }, [inventory.length])
 
@@ -199,7 +213,7 @@ export default function DailyBags({
         if (Array.isArray(parsed.bags)) setBags(parsed.bags)
         if (Array.isArray(parsed.inventory)) setWorkingInventory(parsed.inventory)
       }
-    } catch {}
+    } catch { }
   }, [])
 
   // Persistence: save on change
@@ -208,7 +222,7 @@ export default function DailyBags({
       if (typeof window === 'undefined') return
       const payload = JSON.stringify({ bags, inventory: workingInventory })
       localStorage.setItem('daily_bags_state', payload)
-    } catch {}
+    } catch { }
   }, [bags, workingInventory])
 
   const allOrders = React.useMemo(() => (orders.length > 0 ? orders : apiOrders), [orders, apiOrders])
@@ -264,47 +278,224 @@ export default function DailyBags({
     }
   }
 
-  function simulateCreateBags(currentOrders: Order[]) {
-    // Greedy fill, allow splitting orders across bags
+  function simulateCreateBags(currentOrders: Order[], currentInventory: InventoryReel[]) {
     const output: Bag[] = []
     let bagNum = 1
-    let remainingOrders: { id: string; customer: string; meters: number }[] =
-      currentOrders.map((o) => ({ id: o.id, customer: o.customer, meters: o.meters }))
 
-    while (remainingOrders.length > 0) {
-      let capacity = targetMetersPerBag
-      const items: BagItem[] = []
-      let filledFromInventory = 0
-
-      for (let i = 0; i < remainingOrders.length && capacity > 0; ) {
-        const o = remainingOrders[i]
-        if (o.meters <= capacity) {
-          items.push({ kind: "order", orderId: o.id, customer: o.customer, meters: o.meters })
-          capacity -= o.meters
-          remainingOrders.splice(i, 1)
-        } else {
-          // split the order
-          items.push({ kind: "order", orderId: o.id, customer: o.customer, meters: capacity })
-          o.meters -= capacity
-          capacity = 0
-        }
-      }
-
-      const totalMeters = targetMetersPerBag - capacity
-      output.push({
-        bagNumber: bagNum++,
-        items,
-        totalMeters,
-        filledFromInventory,
-      })
-
-      // If capacity still remains and no more orders, stop loop (partial bag)
-      if (capacity > 0 && remainingOrders.length === 0) {
-        break
-      }
+    // 1. Deconstruct orders into individual reels with metadata
+    type ReelItem = {
+      source: "order"
+      id: string // orderId
+      customer: string
+      reelSize: number
+      brand: string
+      product: string // raw product name
+      cord: number
     }
 
+    const allReels: ReelItem[] = []
+    currentOrders.forEach(o => {
+      if (o.reels && o.reelSize && o.brand && o.productNameRaw && o.cord) {
+        for (let i = 0; i < o.reels; i++) {
+          allReels.push({
+            source: "order",
+            id: o.id,
+            customer: o.customer,
+            reelSize: o.reelSize,
+            brand: o.brand,
+            product: o.productNameRaw,
+            cord: o.cord
+          })
+        }
+      }
+    })
+
+    // 2. Group by Product (Brand + Name + Cord)
+    const groups = new Map<string, ReelItem[]>()
+    allReels.forEach(r => {
+      const key = `${r.brand}|${r.product}|${r.cord}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(r)
+    })
+
+    // Helper to find inventory for a group
+    const findInventory = (brand: string, product: string, cord: number, size: number, count: number) => {
+      // Find matching inventory item
+      const invItem = currentInventory.find(i =>
+        i.brandName === brand &&
+        i.productName === product &&
+        i.cord === cord &&
+        i.reelSize === size &&
+        (i.reels ?? 0) >= count
+      )
+      return invItem
+    }
+
+    // Helper to fill a bag from inventory
+    const fillFromInventory = (bagItems: BagItem[], currentMeters: number, brand: string, product: string, cord: number) => {
+      let meters = currentMeters
+      let filled = 0
+      const needed = targetMetersPerBag - meters
+      if (needed <= 0) return 0
+
+      // Find matching inventory sorted by size descending (greedy)
+      const matchingInv = currentInventory.filter(i =>
+        i.brandName === brand &&
+        i.productName === product &&
+        i.cord === cord &&
+        (i.reels ?? 0) > 0
+      ).sort((a, b) => (b.reelSize ?? 0) - (a.reelSize ?? 0))
+
+      for (const inv of matchingInv) {
+        const size = inv.reelSize ?? 0
+        if (size <= 0) continue
+
+        // Take as many as fit
+        while ((inv.reels ?? 0) > 0 && (meters + size) <= targetMetersPerBag) {
+          bagItems.push({
+            kind: "inventory",
+            reelId: inv.id,
+            meters: size,
+            label: `${brand} ${product}`,
+            reelSize: size
+          })
+          inv.reels = (inv.reels ?? 0) - 1
+          meters += size
+          filled += size
+        }
+      }
+      return filled
+    }
+
+    // 3. Process each group
+    groups.forEach((reels, key) => {
+      const [brand, product, cordStr] = key.split("|")
+      const cord = Number(cordStr)
+
+      // Prioritize strict combinations
+      const reels5000 = reels.filter(r => r.reelSize === 5000)
+      const reels2500 = reels.filter(r => r.reelSize === 2500)
+      const reels1000 = reels.filter(r => r.reelSize === 1000)
+
+      // Keep track of used reels to identify leftovers
+      const usedReels = new Set<ReelItem>()
+
+      // A. 5000m Reels (1 per bag)
+      reels5000.forEach(r => {
+        output.push({
+          bagNumber: bagNum++,
+          items: [{ kind: "order", orderId: r.id, customer: r.customer, meters: 5000, reelSize: 5000 }],
+          totalMeters: 5000,
+          filledFromInventory: 0
+        })
+        usedReels.add(r)
+      })
+
+      // B. 2500m Reels (2 per bag)
+      while (reels2500.filter(r => !usedReels.has(r)).length >= 2) {
+        const available = reels2500.filter(r => !usedReels.has(r))
+        const r1 = available[0]
+        const r2 = available[1]
+        output.push({
+          bagNumber: bagNum++,
+          items: [
+            { kind: "order", orderId: r1.id, customer: r1.customer, meters: 2500, reelSize: 2500 },
+            { kind: "order", orderId: r2.id, customer: r2.customer, meters: 2500, reelSize: 2500 }
+          ],
+          totalMeters: 5000,
+          filledFromInventory: 0
+        })
+        usedReels.add(r1)
+        usedReels.add(r2)
+      }
+
+      // C. 1000m Reels (5 per bag)
+      while (reels1000.filter(r => !usedReels.has(r)).length >= 5) {
+        const available = reels1000.filter(r => !usedReels.has(r))
+        const batch = available.slice(0, 5)
+        output.push({
+          bagNumber: bagNum++,
+          items: batch.map(r => ({ kind: "order", orderId: r.id, customer: r.customer, meters: 1000, reelSize: 1000 })),
+          totalMeters: 5000,
+          filledFromInventory: 0
+        })
+        batch.forEach(r => usedReels.add(r))
+      }
+
+      // D. Process Leftovers (Anything not used above, including odd 2500s, 1000s, and weird sizes like 2000)
+      const leftovers = reels.filter(r => !usedReels.has(r))
+
+      // Sort leftovers largest to smallest to pack efficiently
+      leftovers.sort((a, b) => b.reelSize - a.reelSize)
+
+      let currentBagItems: BagItem[] = []
+      let currentMeters = 0
+
+      leftovers.forEach((r) => {
+        if (currentMeters + r.reelSize > targetMetersPerBag) {
+          // Bag is full-ish, try to top up and close it
+          const filled = fillFromInventory(currentBagItems, currentMeters, brand, product, cord)
+          output.push({
+            bagNumber: bagNum++,
+            items: currentBagItems,
+            totalMeters: currentMeters + filled,
+            filledFromInventory: filled
+          })
+          // Start new bag
+          currentBagItems = []
+          currentMeters = 0
+        }
+
+        currentBagItems.push({ kind: "order", orderId: r.id, customer: r.customer, meters: r.reelSize, reelSize: r.reelSize })
+        currentMeters += r.reelSize
+      })
+
+      // Close final bag if exists
+      if (currentBagItems.length > 0) {
+        const filled = fillFromInventory(currentBagItems, currentMeters, brand, product, cord)
+        output.push({
+          bagNumber: bagNum++,
+          items: currentBagItems,
+          totalMeters: currentMeters + filled,
+          filledFromInventory: filled
+        })
+      }
+    })
+
     return output
+  }
+
+  function restoreInventoryFromBag(bag: Bag) {
+    // Restore inventory items that were used in this bag
+    const invCopy = [...workingInventory]
+    bag.items.forEach(item => {
+      if (item.kind === "inventory") {
+        const invItem = invCopy.find(i => i.id === item.reelId)
+        if (invItem && item.reelSize) {
+          // Restore the reel count
+          invItem.reels = (invItem.reels ?? 0) + 1
+          invItem.metersAvailable = (invItem.metersAvailable ?? 0) + item.meters
+        }
+      }
+    })
+    setWorkingInventory(invCopy)
+    onInventoryUpdate?.(invCopy)
+  }
+
+  function handleUntie(bagIndex: number) {
+    if (!bags) return
+    const bag = bags[bagIndex]
+
+    // Restore inventory
+    restoreInventoryFromBag(bag)
+
+    // Remove bag
+    const nextBags = bags.filter((_, i) => i !== bagIndex)
+    setBags(nextBags.length > 0 ? nextBags : null)
+
+    toast.success(`Bag #${bag.bagNumber} untied`, {
+      description: "Orders returned to today's list and inventory restored."
+    })
   }
 
   async function handleCreateBags() {
@@ -318,9 +509,12 @@ export default function DailyBags({
       setStatusText("Optimizing pack plan…")
       await delay(500)
 
-      const baseBags = simulateCreateBags(sortedOrders)
+      // Clone inventory to avoid mutating state directly during simulation
+      const invClone = workingInventory.map(i => ({ ...i }))
+      const baseBags = simulateCreateBags(sortedOrders, invClone)
+
       if (baseBags.length === 0) {
-        toast("No new orders to bag")
+        toast("No valid bags could be formed")
         return
       }
 
@@ -334,16 +528,38 @@ export default function DailyBags({
       }))
       const nextBags = [...(bags ?? []), ...renumbered]
 
-      // If last newly created bag is partial, prompt for inventory top-up
-      const last = renumbered.length > 0 ? renumbered[renumbered.length - 1] : null
-
       setBags(nextBags)
-      if (last && last.totalMeters < targetMetersPerBag) {
-        const missing = targetMetersPerBag - last.totalMeters
-        setConfirmTopUp({ open: true, missingMeters: missing })
+      // Update working inventory with the changes from simulation
+      setWorkingInventory(invClone)
+      onInventoryUpdate?.(invClone)
+
+      // Check for partial bags and auto-trigger top-up dialog
+      const firstPartialIndex = nextBags.findIndex(b => b.totalMeters < targetMetersPerBag)
+      if (firstPartialIndex !== -1) {
+        const partialBag = nextBags[firstPartialIndex]
+        const missing = targetMetersPerBag - partialBag.totalMeters
+
+        toast.warning(`Created ${renumbered.length} bags`, {
+          description: "Some bags are partial. Opening inventory selector..."
+        })
+
+        // Auto-open the manual top-up dialog for the first partial bag
+        setTimeout(() => {
+          setManualTopUp({
+            open: true,
+            lastBagIndex: firstPartialIndex,
+            allocations: {}
+          })
+          setPartialNeedsInventory({
+            open: false,
+            lastBagIndex: firstPartialIndex,
+            missingMeters: missing
+          })
+        }, 800)
       } else {
-        toast.success("Bags created")
+        toast.success(`Created ${renumbered.length} bags`)
       }
+
     } catch (e) {
       toast.error("Failed to create bags")
     } finally {
@@ -359,7 +575,7 @@ export default function DailyBags({
     const bag = { ...updated[idx] }
     let need = Math.max(0, targetMetersPerBag - bag.totalMeters)
     if (need === 0) {
-      setPartialNeedsInventory({ open: false, lastBagIndex: null })
+      setPartialNeedsInventory({ open: false, lastBagIndex: null, missingMeters: 0 })
       return
     }
 
@@ -403,7 +619,7 @@ export default function DailyBags({
       } as any)
     }
 
-    setPartialNeedsInventory({ open: false, lastBagIndex: null })
+    setPartialNeedsInventory({ open: false, lastBagIndex: null, missingMeters: 0 })
   }
 
   function openManualSelector() {
@@ -469,7 +685,7 @@ export default function DailyBags({
   }
 
   function keepPartialBag() {
-    setPartialNeedsInventory({ open: false, lastBagIndex: null })
+    setPartialNeedsInventory({ open: false, lastBagIndex: null, missingMeters: 0 })
     toast.message?.("Keeping partial bag", {
       description: "You can adjust later from inventory.",
     } as any)
@@ -550,36 +766,15 @@ export default function DailyBags({
 
   const canCreateBags = React.useMemo(() => sourceOrders.length > 0, [sourceOrders.length])
 
-  function restoreInventoryFromBag(bag: Bag) {
-    const invCopy = workingInventory.map((r) => ({ ...r }))
-    bag.items.forEach((it) => {
-      if (it.kind === "inventory") {
-        const inv = invCopy.find((r) => r.id === it.reelId)
-        if (inv) {
-          if (inv.reelSize && inv.reelSize > 0) {
-            const reelsToRestore = Math.round(it.meters / inv.reelSize)
-            inv.reels = (inv.reels ?? 0) + reelsToRestore
-            inv.metersAvailable = (inv.reels ?? 0) * (inv.reelSize ?? 0)
-          } else {
-            inv.metersAvailable += it.meters
-          }
-        }
-      }
-    })
-    setWorkingInventory(invCopy)
-    onInventoryUpdate?.(invCopy)
-  }
-
   return (
     <section
       className={[
-        "w-full max-w-full bg-card rounded-xl border border-border shadow-sm",
-        "p-4 sm:p-6",
+        "w-full max-w-full space-y-6",
         className ?? "",
       ].join(" ")}
       aria-label="Daily Bags"
     >
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
             Daily Bags
@@ -591,7 +786,7 @@ export default function DailyBags({
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="secondary" className="bg-secondary hover:bg-muted">
+              <Button variant="outline" className="bg-background">
                 <GalleryVerticalEnd className="mr-2 h-4 w-4" aria-hidden="true" />
                 Export
               </Button>
@@ -605,7 +800,7 @@ export default function DailyBags({
           <Button
             onClick={handleCreateBags}
             disabled={isCreating || !canCreateBags}
-            className="bg-primary text-primary-foreground hover:opacity-90"
+            className="bg-primary text-primary-foreground hover:opacity-90 shadow-sm"
           >
             {isCreating ? (
               <>
@@ -623,7 +818,7 @@ export default function DailyBags({
       </div>
 
       {isCreating && (
-        <Card className="mt-4 border-dashed bg-secondary">
+        <Card className="border-dashed bg-muted/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Processing
@@ -636,149 +831,147 @@ export default function DailyBags({
         </Card>
       )}
 
-      <Separator className="my-6" />
-
-      <div className="flex items-center gap-3 flex-wrap">
-        <StatPill
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
           icon={<TableIcon className="h-4 w-4" aria-hidden="true" />}
           label="Total Orders"
           value={sourceOrders.length.toString()}
         />
-        <StatPill
+        <StatCard
           icon={<ShoppingBag className="h-4 w-4" aria-hidden="true" />}
           label="Total Order Meters"
           value={`${totals.totalOrders.toLocaleString()} m`}
         />
-        <StatPill
+        <StatCard
           icon={<ShoppingBasket className="h-4 w-4" aria-hidden="true" />}
-          label="Bags"
+          label="Bags Created"
           value={(totals.totalBags || 0).toString()}
           tone={totals.partial ? "warning" : "default"}
         />
       </div>
 
-      <div className="mt-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base sm:text-lg font-semibold">Today&apos;s Orders</h3>
-          <Badge variant="outline" className="rounded-full">
-            {new Date().toLocaleDateString()}
-          </Badge>
+      {/* Orders Table Card */}
+      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between border-b bg-muted/30 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold">Today&apos;s Orders</h3>
+            <Badge variant="secondary" className="rounded-full text-xs font-normal">
+              {new Date().toLocaleDateString()}
+            </Badge>
+          </div>
         </div>
-        <div className="relative rounded-lg border bg-background overflow-hidden">
-          <div className="max-w-full overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-muted/60">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow className="hover:bg-transparent border-b border-border">
+                <SortableHead onClick={() => toggleSort("id")} active={sortKey === "id"} asc={sortAsc}>
+                  Order ID
+                </SortableHead>
+                <SortableHead
+                  onClick={() => toggleSort("customer")}
+                  active={sortKey === "customer"}
+                  asc={sortAsc}
+                >
+                  Customer
+                </SortableHead>
+                <SortableHead
+                  onClick={() => toggleSort("product")}
+                  active={sortKey === "product"}
+                  asc={sortAsc}
+                >
+                  Product
+                </SortableHead>
+                <SortableHead
+                  onClick={() => toggleSort("meters")}
+                  active={sortKey === "meters"}
+                  asc={sortAsc}
+                  align="right"
+                >
+                  Meters
+                </SortableHead>
+                <SortableHead
+                  onClick={() => toggleSort("priority")}
+                  active={sortKey === "priority"}
+                  asc={sortAsc}
+                  align="center"
+                >
+                  Priority
+                </SortableHead>
+                <SortableHead
+                  onClick={() => toggleSort("dueDate")}
+                  active={sortKey === "dueDate"}
+                  asc={sortAsc}
+                >
+                  Due
+                </SortableHead>
+                <SortableHead
+                  onClick={() => toggleSort("status")}
+                  active={sortKey === "status"}
+                  asc={sortAsc}
+                >
+                  Status
+                </SortableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedOrders.length === 0 ? (
                 <TableRow>
-                  <SortableHead onClick={() => toggleSort("id")} active={sortKey === "id"} asc={sortAsc}>
-                    Order ID
-                  </SortableHead>
-                  <SortableHead
-                    onClick={() => toggleSort("customer")}
-                    active={sortKey === "customer"}
-                    asc={sortAsc}
-                  >
-                    Customer
-                  </SortableHead>
-                  <SortableHead
-                    onClick={() => toggleSort("product")}
-                    active={sortKey === "product"}
-                    asc={sortAsc}
-                  >
-                    Product
-                  </SortableHead>
-                  <SortableHead
-                    onClick={() => toggleSort("meters")}
-                    active={sortKey === "meters"}
-                    asc={sortAsc}
-                    align="right"
-                  >
-                    Meters
-                  </SortableHead>
-                  <SortableHead
-                    onClick={() => toggleSort("priority")}
-                    active={sortKey === "priority"}
-                    asc={sortAsc}
-                    align="center"
-                  >
-                    Priority
-                  </SortableHead>
-                  <SortableHead
-                    onClick={() => toggleSort("dueDate")}
-                    active={sortKey === "dueDate"}
-                    asc={sortAsc}
-                  >
-                    Due
-                  </SortableHead>
-                  <SortableHead
-                    onClick={() => toggleSort("status")}
-                    active={sortKey === "status"}
-                    asc={sortAsc}
-                  >
-                    Status
-                  </SortableHead>
+                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                    No orders for today.
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedOrders.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
-                      No orders for today.
+              ) : (
+                sortedOrders.map((o) => (
+                  <TableRow key={o.id} className="hover:bg-muted/30">
+                    <TableCell className="font-medium break-words">{o.id}</TableCell>
+                    <TableCell className="min-w-0">
+                      <span className="truncate block">{o.customer}</span>
+                    </TableCell>
+                    <TableCell className="min-w-0">
+                      <span className="truncate block">{o.product}</span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {o.meters.toLocaleString()} m
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="rounded-full font-normal">
+                        {o.priority ?? "-"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {o.dueDate ? new Date(o.dueDate).toLocaleDateString() : "-"}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={o.status ?? "pending"} />
                     </TableCell>
                   </TableRow>
-                ) : (
-                  sortedOrders.map((o) => (
-                    <TableRow key={o.id} className="hover:bg-accent/40">
-                      <TableCell className="font-medium break-words">{o.id}</TableCell>
-                      <TableCell className="min-w-0">
-                        <span className="truncate block">{o.customer}</span>
-                      </TableCell>
-                      <TableCell className="min-w-0">
-                        <span className="truncate block">{o.product}</span>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {o.meters.toLocaleString()} m
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary" className="rounded-full">
-                          {o.priority ?? "-"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {o.dueDate ? new Date(o.dueDate).toLocaleDateString() : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={o.status ?? "pending"} />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
 
       {bags && (
-        <>
-          <Separator className="my-6" />
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h3 className="text-base sm:text-lg font-semibold">Results</h3>
-            <div className="text-sm text-muted-foreground">
-              Total meters packed:{" "}
-              <span className="font-medium text-foreground">
-                {totals.totalBagMeters.toLocaleString()} m
-              </span>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <h3 className="text-lg font-semibold">Packing Results</h3>
+            <div className="text-sm text-muted-foreground bg-muted/50 px-3 py-1 rounded-full">
+              Total Packed: <span className="font-medium text-foreground">{totals.totalBagMeters.toLocaleString()} m</span>
             </div>
           </div>
-          <div className="grid gap-4 sm:gap-5">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
             {bags.map((bag, bagIdx) => (
               <div
                 key={bag.bagNumber}
-                className="rounded-lg border p-4 bg-secondary/40 hover:bg-secondary/60 transition-colors"
+                className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
               >
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-lg",
+                      bag.totalMeters >= targetMetersPerBag ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                    )}>
                       {bag.totalMeters >= targetMetersPerBag ? (
                         <PackageCheck className="h-5 w-5" aria-hidden="true" />
                       ) : (
@@ -788,90 +981,96 @@ export default function DailyBags({
                     <div>
                       <div className="font-semibold">Bag #{bag.bagNumber}</div>
                       <div className="text-xs text-muted-foreground">
-                        {bag.totalMeters.toLocaleString()} m
-                        {bag.filledFromInventory > 0 && (
-                          <span className="ml-2">
-                            • {bag.filledFromInventory.toLocaleString()} m from inventory
-                          </span>
-                        )}
+                        {bag.totalMeters.toLocaleString()} / {targetMetersPerBag.toLocaleString()} m
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={bag.totalMeters >= targetMetersPerBag ? "default" : "outline"}>
-                      {bag.totalMeters >= targetMetersPerBag ? "Complete" : "Partial"}
-                    </Badge>
+                  <div className="flex items-center gap-1">
                     <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setManualTopUp({ open: true, lastBagIndex: bagIdx, allocations: {} })
-                      }}
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleUntie(bagIdx)}
+                      title="Untie Bag"
                     >
-                      Edit
+                      <Unlink className="h-4 w-4" />
+                      <span className="sr-only">Untie</span>
                     </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => {
-                        restoreInventoryFromBag(bag)
-                        setBags((prev) => (prev ? prev.filter((b) => b.bagNumber !== bag.bagNumber) : prev))
-                        toast.success(`Bag #${bag.bagNumber} deleted`)
-                      }}
-                    >
-                      Delete
-                    </Button>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <span className="sr-only">Menu</span>
+                          <ArrowUpDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Bag Actions</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => {
+                          setPartialNeedsInventory({
+                            open: true,
+                            lastBagIndex: bagIdx,
+                            missingMeters: Math.max(0, targetMetersPerBag - bag.totalMeters)
+                          })
+                        }}>
+                          Top up from Inventory
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setManualTopUp({
+                            open: true,
+                            lastBagIndex: bagIdx,
+                            allocations: {}
+                          })
+                        }}>
+                          Manual Adjust
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => handleUntie(bagIdx)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Unlink className="mr-2 h-4 w-4" />
+                          Untie Bag
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
-
-                <div className="mt-3 max-w-full overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Reference</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead className="text-right">Meters</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {bag.items.map((it, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="whitespace-nowrap">
-                            {it.kind === "order" ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <ShoppingBag className="h-4 w-4 text-foreground/80" />
-                                Order
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5">
-                                <ShoppingBasket className="h-4 w-4 text-foreground/80" />
-                                Inventory
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="break-words">
-                            {it.kind === "order" ? it.orderId : (it.label || it.reelId)}
-                          </TableCell>
-                          <TableCell className="min-w-0">
-                            {it.kind === "order" ? (
-                              <span className="truncate block">{it.customer}</span>
-                            ) : (
-                              "-"
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {it.meters.toLocaleString()} m
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                <div className="p-4 flex-1">
+                  <ul className="space-y-3">
+                    {bag.items.map((item, idx) => (
+                      <li key={idx} className="text-sm flex justify-between gap-2">
+                        <div className="min-w-0">
+                          {item.kind === "order" ? (
+                            <>
+                              <div className="font-medium truncate">{item.customer}</div>
+                              <div className="text-xs text-muted-foreground truncate">Order #{item.orderId}</div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="font-medium text-amber-600 dark:text-amber-500">Inventory Stock</div>
+                              <div className="text-xs text-muted-foreground truncate">{item.label || "Loose stock"}</div>
+                            </>
+                          )}
+                        </div>
+                        <div className="font-mono text-xs tabular-nums whitespace-nowrap pt-0.5">
+                          {item.meters.toLocaleString()} m
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
+                {bag.filledFromInventory > 0 && (
+                  <div className="bg-amber-50 dark:bg-amber-950/30 px-4 py-2 text-xs text-amber-700 dark:text-amber-400 border-t border-amber-100 dark:border-amber-900/50">
+                    Includes {bag.filledFromInventory.toLocaleString()} m from inventory
+                  </div>
+                )}
               </div>
             ))}
           </div>
-        </>
+        </div>
+
+
       )}
 
       {/* Step 1: Confirm that bag is lacking X meters and propose Kushal top-up */}
@@ -971,7 +1170,7 @@ export default function DailyBags({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </section >
   )
 }
 
@@ -1006,7 +1205,7 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   )
 }
 
-function StatPill({
+function StatCard({
   icon,
   label,
   value,
@@ -1017,23 +1216,17 @@ function StatPill({
   value: string
   tone?: "default" | "warning"
 }) {
-  const toneClass =
-    tone === "warning"
-      ? "bg-accent text-accent-foreground"
-      : "bg-secondary text-foreground"
   return (
-    <div
-      className={[
-        "inline-flex items-center gap-3 rounded-full border px-3 py-2",
-        toneClass,
-      ].join(" ")}
-    >
-      <div className="h-8 w-8 inline-flex items-center justify-center rounded-full bg-card border">
+    <div className="rounded-xl border bg-card p-4 shadow-sm flex items-center gap-4">
+      <div className={cn(
+        "flex h-12 w-12 items-center justify-center rounded-full border",
+        tone === "warning" ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-900" : "bg-primary/10 text-primary border-primary/20"
+      )}>
         {icon}
       </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="text-sm font-semibold">{value}</span>
+      <div>
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        <p className="text-2xl font-bold tracking-tight">{value}</p>
       </div>
     </div>
   )
@@ -1054,29 +1247,29 @@ function SortableHead({
 }) {
   return (
     <TableHead
-      className={[
+      className={cn(
         "whitespace-nowrap",
-        align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left",
-      ].join(" ")}
+        align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left"
+      )}
     >
       <button
         type="button"
         onClick={onClick}
-        className={[
+        className={cn(
           "inline-flex items-center gap-1",
           "text-xs sm:text-sm font-medium text-foreground",
-          "hover:text-primary transition-colors",
-        ].join(" ")}
+          "hover:text-primary transition-colors"
+        )}
         aria-pressed={active}
       >
         {children}
         <ArrowUpDown
-          className={[
+          className={cn(
             "h-3.5 w-3.5",
             active ? "opacity-100 text-primary" : "opacity-60",
             asc ? "rotate-180" : "rotate-0",
-            "transition-transform",
-          ].join(" ")}
+            "transition-transform"
+          )}
           aria-hidden="true"
         />
       </button>

@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   PanelLeft,
   LayoutDashboard,
@@ -11,6 +12,7 @@ import {
   PanelTop,
   LayoutTemplate,
 } from "lucide-react";
+import { KiteIcon, BackgroundPattern } from "@/components/KiteDecorations";
 
 type ModuleKey = "inventory" | "orders" | "bags" | "analytics";
 
@@ -161,7 +163,7 @@ export default function DashboardLayout({
               )}
               aria-hidden="true"
             >
-              <span className="text-xs font-bold">KM</span>
+              <KiteIcon className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <p className="font-semibold leading-none truncate">
@@ -174,6 +176,7 @@ export default function DashboardLayout({
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
             <time
               dateTime={now.toISOString()}
               aria-label="Current date and time"
@@ -270,16 +273,9 @@ export default function DashboardLayout({
             )}
             role="main"
           >
-            <div
-              className={cn(
-                "w-full max-w-full",
-                "bg-card",
-                "rounded-xl",
-                "border border-[var(--border)]",
-                "shadow-sm"
-              )}
-            >
-              <div className="p-4 md:p-6">{children}</div>
+            <div className="w-full max-w-7xl mx-auto relative">
+              <BackgroundPattern className="opacity-[0.02]" />
+              {children}
             </div>
           </main>
         </div>
